@@ -7,7 +7,7 @@ import json
 clang_format_path = """/home/jacques/blender/lib/linux_x86_64_glibc_228/llvm/bin/clang-format"""
 compile_commands_path = """/home/jacques/blender/build_release/compile_commands.json"""
 source_code_path = """
-/home/jacques/blender/blender/source/blender/editors/armature/pose_utils.cc
+/home/jacques/blender/blender/source/blender/editors/space_image/space_image.cc
 """.strip()
 
 # Also automatically detected below.
@@ -28,6 +28,7 @@ with open(source_code_path) as f:
     source_code = f.read()
 source_code = re.subn(r"\bNULL\b", "nullptr", source_code)[0]
 source_code = re.subn(r"UNUSED\((\w+)\)", r" /*\g<1>*/", source_code)[0]
+source_code = re.subn(r"UNUSED\((\w+)([\[\]0-9]+)\)", r"\g<2> /*\g<1>*/", source_code)[0]
 
 source_code_parts = []
 for line in source_code.splitlines():
@@ -46,6 +47,12 @@ if " ." in source_code:
     print("Warning: file likely contains designated initializers. Search for ' .'")
 if "typedef struct" in source_code:
     print("Info: file contains 'typedef struct'. The 'typedef' is likely unnecessary.")
+if "typedef enum" in source_code:
+    print("Info: file contains 'typedef enum'. The 'typedef' is likley unnecessary.")
+if "#if 0" in source_code:
+    print("Check '#if 0' block for accidental formatting changes")
+if "){" in source_code:
+    print("Warning: file likely contains invalid syntax. Search for '){'")
 
 with open(source_code_path, "w") as f:
     f.write(source_code)
@@ -58,6 +65,7 @@ errors = errors.replace("‘", "'").replace("’", "'")
 error_lines = errors.splitlines()
 
 handled_lines = set()
+line_collision = False
 
 def get_code_span(initial_error_line):
     line_number = int(error_lines[initial_error_line+1][:5]) - 1
@@ -67,7 +75,7 @@ def get_code_span(initial_error_line):
         end_column = begin_column + 1
     else:
         begin_column = min(column_indicator_line.index('~'), column_indicator_line.index('^')) - 1
-        end_column = column_indicator_line.rindex('~')
+        end_column = max(column_indicator_line.rindex('~'), column_indicator_line.rindex('^'))
     return line_number, begin_column, end_column
 
 for i, error_line in enumerate(error_lines):
@@ -80,12 +88,13 @@ for i, error_line in enumerate(error_lines):
         except:
             continue
         if line_number in handled_lines:
+            line_collision = True
             continue
         old_line = source_code_lines[line_number]
         new_line = f"{old_line[:begin_column]}static_cast<{to_type}>({old_line[begin_column:end_column]}){old_line[end_column:]}"
         source_code_lines[line_number] = new_line
         handled_lines.add(line_number)
-    elif match := re.search(r"(invalid conversion from|cannot convert) '(const )?(char|bool|int|short int)' to '(\w+)'", error_line):
+    elif match := re.search(r"(invalid conversion from|cannot convert) '(const )?(char|bool|int|short int|unsigned int)' to '(\w+)'", error_line):
         to_type = match.group(4)
         to_type = to_type.replace("short int", "short")
         try:
@@ -93,6 +102,7 @@ for i, error_line in enumerate(error_lines):
         except:
             continue
         if line_number in handled_lines:
+            line_collision = True
             continue
         old_line = source_code_lines[line_number]
         new_line = f"{old_line[:begin_column]}{to_type}({old_line[begin_column:end_column]}){old_line[end_column:]}"
@@ -103,3 +113,6 @@ with open(source_code_path, "w") as f:
     f.writelines("\n".join(source_code_lines) + "\n")
 
 subprocess.run([clang_format_path, "-i", source_code_path])
+
+if line_collision:
+    print("Run again, multiple changes on a single line are needed")
