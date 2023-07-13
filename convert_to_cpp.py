@@ -7,7 +7,7 @@ import json
 clang_format_path = """/home/jacques/blender/lib/linux_x86_64_glibc_228/llvm/bin/clang-format"""
 compile_commands_path = """/home/jacques/blender/build_release/compile_commands.json"""
 source_code_path = """
-/home/jacques/blender/blender/source/blender/editors/space_image/space_image.cc
+/home/jacques/blender/blender/source/blender/editors/transform/transform_gizmo_extrude_3d.cc
 """.strip()
 
 # Also automatically detected below.
@@ -21,7 +21,7 @@ for command_entry in compile_commands:
         compile_command = command_entry["command"]
         break
 else:
-    print("Can't file compile command")
+    print("Can't find compile command")
     sys.exit()
 
 with open(source_code_path) as f:
